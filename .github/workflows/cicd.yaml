@@ -17,11 +17,12 @@ jobs:
       - run: npm ci
       - run: npm run build
       - run: npm test
+      - run: mkdir artifacts && mv build ./artifacts/.
       - name: Upload build output
         uses: actions/upload-artifact@v3
         with:
           name: build-output
-          path: ./build
+          path: ./artifacts
 
   deploy-job:
     runs-on: ubuntu-latest

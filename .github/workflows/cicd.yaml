@@ -4,19 +4,12 @@ on: [push]
 env:
   BUCKET_NAME: my-website-bucket-234808sfg
 jobs:
-  Explore-GitHub-Actions:
+  test-job:
     runs-on: ubuntu-latest
     steps:
-      - run: echo "🎉 The job was automatically triggered by a ${{ github.event_name }} event."
-      - run: echo "🐧 This job is now running on a ${{ runner.os }} server hosted by GitHub!"
       - name: Check out repository code
         uses: actions/checkout@v4
-      - run: echo "💡 The ${{ github.repository }} repository has been cloned to the runner."
-      - run: echo "🖥️ The workflow is now ready to test your code on the runner."
-      - name: List files in the repository
-        run: |
-          ls ${{ github.workspace }}
-      - run: echo "🍏 This job's status is ${{ job.status }}."
+      # setup nodejs in runner
       - name: Use Node.js
         uses: actions/setup-node@v3
         with:
@@ -24,18 +17,38 @@ jobs:
       - run: npm ci
       - run: npm run build
       - run: npm test
+      - name: Upload build output
+        uses: actions/upload-artifact@v3
+        with:
+          name: build-output
+          path: ./build
+
+  deploy-job:
+    runs-on: ubuntu-latest
+    needs: test-job
+    steps:      
+      # download build output from previous step
+      - name: Download build output
+        uses: actions/download-artifact@v3
+        with:
+          name: build-output
+      - name: check artifacts
+        run: ls -l ./build
+
+      # setup, configure aws cli
       - id: install-aws-cli
         uses: unfor19/install-aws-cli-action@v1
       - run: mkdir -p ~/.aws/
       - run: echo "$super_secret" > ~/.aws/credentials
         env: # Or as an environment variable
           super_secret: ${{ secrets.AWS_CONFIG }}
-      - run: cat ~/.aws/credentials
       - run: aws configure list-profiles
-      - run: aws s3 ls --region eu-central-1 --profile techstarter
+
+      # setup and deploy terraform
       - uses: hashicorp/setup-terraform@v2
-      - run: terraform version
       - run: terraform -chdir=./infra init -backend-config="password=${{ secrets.GITHUB_TOKEN }}" 
       - run: terraform -chdir=./infra validate
       - run: terraform -chdir=./infra apply -auto-approve -var "bucket_name=$BUCKET_NAME"
+
+      # eigentlicher deployement step
       - run: aws s3 sync --region eu-central-1 ./build s3://$BUCKET_NAME/ --profile techstarter
